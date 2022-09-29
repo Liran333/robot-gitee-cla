@@ -121,7 +121,7 @@ func (bot *robot) handle(
 	hasCLAYes := labels.Has(cfg.CLALabelYes)
 	hasCLANo := labels.Has(cfg.CLALabelNo)
 
-	deleteSignGuide(org, repo, prNumber, bot.cli)
+	deleteSignGuide(org, repo, prNumber, bot.cli, cfg)
 
 	if len(unsigned) == 0 {
 		if hasCLANo {
@@ -160,7 +160,7 @@ func (bot *robot) handle(
 
 	return bot.cli.CreatePRComment(
 		org, repo, prNumber,
-		signGuide(cfg.SignURL, generateUnSignComment(unsigned), cfg.FAQURL),
+		signGuide(cfg.SignURL, generateUnSignComment(unsigned), cfg.FAQURL, cfg),
 	)
 }
 
@@ -257,13 +257,13 @@ func isSigned(email, url string) (bool, error) {
 	return v.Data.Signed, nil
 }
 
-func deleteSignGuide(org string, repo string, number int32, c iClient) {
+func deleteSignGuide(org string, repo string, number int32, c iClient, cfg *botConfig) {
 	v, err := c.ListPRComments(org, repo, number)
 	if err != nil {
 		return
 	}
 
-	prefix := signGuideTitle()
+	prefix := signGuideTitle(cfg)
 	prefixOld := "Thanks for your pull request. Before we can look at your pull request, you'll need to sign a Contributor License Agreement (CLA)."
 	f := func(s string) bool {
 		return strings.HasPrefix(s, prefix) || strings.HasPrefix(s, prefixOld)
@@ -276,19 +276,19 @@ func deleteSignGuide(org string, repo string, number int32, c iClient) {
 	}
 }
 
-func signGuideTitle() string {
-	return "Thanks for your pull request.\n\nThe authors of the following commits have not signed the Contributor License Agreement (CLA):"
+func signGuideTitle(cfg *botConfig) string {
+	return fmt.Sprintf("[![cla-sign](%s \"cla-sign\")](%s)",
+		"https://gitee.com/openeuler/infrastructure/raw/master/docs/cla-guide/comment-img/cla-sign.png", cfg.SignURL)
 }
 
-func signGuide(signURL, cInfo, faq string) string {
+func signGuide(signURL, cInfo, faq string, cfg *botConfig) string {
 	s := `%s
 
 %s
 
-Please check the [**FAQs**](%s) first.
-You can click [**here**](%s) to sign the CLA. After signing the CLA, you must comment "/check-cla" to check the CLA status again.`
+[![cla-faq](%s "cla-faq")](%s).`
 
-	return fmt.Sprintf(s, signGuideTitle(), cInfo, faq, signURL)
+	return fmt.Sprintf(s, signGuideTitle(cfg), cInfo, "https://gitee.com/openeuler/infrastructure/raw/master/docs/cla-guide/comment-img/faq-guide.png", faq)
 }
 
 func alreadySigned(user string) string {
