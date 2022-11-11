@@ -63,7 +63,7 @@ func (bot *robot) RegisterEventHandler(f framework.HandlerRegitster) {
 }
 
 func (bot *robot) handlePREvent(e *sdk.PullRequestEvent, c config.Config, log *logrus.Entry) error {
-	if e.GetPullRequest().GetState() != "open" {
+	if e.GetPullRequest().GetState() != "opened" && e.GetPullRequest().GetState() != "open" {
 		return nil
 	}
 
@@ -169,19 +169,33 @@ func (bot *robot) getPRCommitsAbout(
 	number int32,
 	cfg *botConfig,
 ) ([]*sdk.PullRequestCommits, error) {
-	commits, err := bot.cli.GetPRCommits(org, repo, number)
-	if err != nil {
-		return nil, err
+	// add retry logic
+	var prCommits []sdk.PullRequestCommits
+	retryTimes := 0
+	for {
+		commits, err := bot.cli.GetPRCommits(org, repo, number)
+		if err != nil {
+			retryTimes += 1
+
+			// take a sleep before next api call
+			time.Sleep(1000 * time.Millisecond)
+			continue
+		}
+
+		if err == nil || retryTimes >= 2 {
+			prCommits = commits
+			break
+		}
 	}
 
-	if len(commits) == 0 {
+	if len(prCommits) == 0 {
 		return nil, fmt.Errorf("commits is empty, cla cannot be checked")
 	}
 
 	result := map[string]bool{}
-	unsigned := make([]*sdk.PullRequestCommits, 0, len(commits))
-	for i := range commits {
-		c := &commits[i]
+	unsigned := make([]*sdk.PullRequestCommits, 0, len(prCommits))
+	for i := range prCommits {
+		c := &prCommits[i]
 		email := strings.Trim(getAuthorOfCommit(c, cfg), " ")
 
 		if !utils.IsValidEmail(email) {
